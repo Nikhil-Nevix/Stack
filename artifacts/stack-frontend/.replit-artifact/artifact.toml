@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "STACK Service Desk"
+version = "1.0.0"
+id = "artifacts/stack-frontend"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 25568
+
+[services.development]
+run = "pnpm --filter @workspace/stack-frontend run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/stack-frontend", "run", "build" ]
+publicDir = "artifacts/stack-frontend/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "25568"
+BASE_PATH = "/"

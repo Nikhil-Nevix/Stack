@@ -1,4 +1,4 @@
-modules = ["nodejs-24"]
+modules = ["nodejs-24", "python-3.11"]
 
 [deployment]
 router = "application"
@@ -26,3 +26,21 @@ externalPort = 80
 [[ports]]
 localPort = 8081
 externalPort = 8081
+
+[[ports]]
+localPort = 25568
+externalPort = 3000
+
+[userenv]
+
+[userenv.shared]
+AZURE_OPENAI_DEPLOYMENT = "gpt-4o"
+AZURE_OPENAI_EMBEDDING_DEPLOYMENT = "text-embedding-3-large"
+AZURE_OPENAI_API_VERSION = "2024-02-01"
+ALLOWED_EMAIL_DOMAIN = "jadeglobal.com"
+JWT_ALGORITHM = "HS256"
+JWT_EXPIRE_MINUTES = "480"
+AGENT_HOURLY_COST = "500.0"
+AVG_MANUAL_RESOLUTION_MINS = "45.0"
+FRONTEND_URL = "http://localhost:3000"
+STACK_ENV = "development"
