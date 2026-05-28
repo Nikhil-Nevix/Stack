@@ -1,0 +1,1703 @@
+You are a senior full-stack engineer and AI solutions architect. 
+Your task is to build the complete "STACK Service Desk AI Solution" 
+— an enterprise-grade, AI-powered IT service desk automation platform 
+developed by Jade Global Software Pvt Ltd. 
+
+This is an on-premise deployable system with a React web dashboard, 
+Google Chat Bot, and Microsoft Teams Bot, powered by Azure OpenAI 
+GPT-4o and LangChain.
+
+READ EVERY WORD OF THIS PROMPT BEFORE WRITING A SINGLE LINE OF CODE.
+BUILD EVERYTHING DESCRIBED. NO STUBS. NO PLACEHOLDERS.
+
+════════════════════════════════════════════════════════════
+SECTION 1 — PROJECT IDENTITY
+════════════════════════════════════════════════════════════
+
+Project Name   : STACK Service Desk AI Solution
+Organization   : Jade Global Software Pvt Ltd
+Version        : 1.0
+Project Lead   : Sanjay Deshpande
+Project Guide  : Dattatraya Girawale
+Lead Developer : Nikhil Rokade
+Chatbot Dev    : Priyanka Chougule
+
+Brand Colors:
+  Primary Navy  : #1B3A6B
+  Accent Orange : #F47920
+  Cyan Accent   : #0097A7
+  White         : #FFFFFF
+
+Allowed Email Domain: @jadeglobal.com
+  Only users with email ending in @jadeglobal.com
+  may register or log in to the application.
+  Reject all other domains at the auth layer with:
+  "Access restricted to Jade Global employees only."
+
+Default Seed Accounts:
+  Admin : admin@jadeglobal.com    / password: Admin@Stack2025
+  User  : testuser@jadeglobal.com / password: Test@Stack2025
+  Both must be created in the users/agents table on first run.
+  admin account → role: admin
+  testuser account → role: user (end user, not agent)
+
+════════════════════════════════════════════════════════════
+SECTION 2 — SYSTEM OVERVIEW
+════════════════════════════════════════════════════════════
+
+STACK automates IT service desk ticket resolution by:
+- Accepting tickets via Web Dashboard, Google Chat, Teams
+- Running AI triage using Azure OpenAI GPT-4o + LangChain
+- Retrieving SOPs via RAG pipeline (pgvector)
+- Auto-resolving tickets via Microsoft Graph API / PowerShell
+- Escalating to human agents when AI confidence is low
+- Logging everything to PostgreSQL + Elasticsearch
+- Displaying real-time dashboards, logs, reports, ROI metrics
+
+Four use cases:
+  UC-01: SharePoint Tickets (Access + Admin)
+  UC-02: License Requests (BlueBeam, Adobe, O365)
+  UC-03: DL Update Requests (O365)
+  UC-04: Basic Windows Troubleshooting
+
+Three user-facing channels:
+  1. React.js Web Dashboard
+  2. Google Chat Bot
+  3. Microsoft Teams Bot
+
+════════════════════════════════════════════════════════════
+SECTION 3 — RBAC SPECIFICATION
+════════════════════════════════════════════════════════════
+
+Implement full Role-Based Access Control with 3 roles:
+  admin    → full system access
+  agent    → ticket handling + limited config
+  user     → self-service only (raise + track own tickets)
+
+3.1 ROLE DEFINITIONS
+
+ADMIN (admin@jadeglobal.com and any role=admin account):
+  - Full access to ALL pages and features
+  - Can view ALL tickets (not just own)
+  - Can configure confidence thresholds per use case
+  - Can configure SLA settings
+  - Can manage agent groups and assignment modes
+  - Can add/remove/edit agents
+  - Can upload/edit/delete SOPs
+  - Can view full audit logs and API call logs
+  - Can view ROI dashboard and change cost settings
+  - Can trigger AI resolution on any ticket
+  - Can manually escalate or close any ticket
+  - Can export all reports
+  - Can manage user accounts
+  - Sees Admin sidebar menu item
+  - Sees SOP Manager sidebar menu item
+  - Sees all columns in ticket table including AI internals
+
+AGENT (role=agent):
+  - Can view tickets assigned to their groups
+  - Can add notes to assigned tickets
+  - Can resolve/close assigned tickets
+  - Can view reports (read-only, no export)
+  - Can view audit logs for their tickets only
+  - Cannot access Admin configuration page
+  - Cannot change confidence thresholds or SLA configs
+  - Cannot manage other agents or groups
+  - Can view ROI dashboard (read-only)
+  - Cannot upload or edit SOPs
+  - Does NOT see Admin or SOP Manager in sidebar
+
+USER (role=user — end users like testuser@jadeglobal.com):
+  - Can ONLY see their own tickets
+  - Can raise new tickets via web dashboard
+  - Can view status and notes on own tickets
+  - Can add comments to own tickets
+  - Cannot see other users' tickets
+  - Cannot see any admin configuration
+  - Cannot see audit logs, API logs, PowerShell logs
+  - Cannot see ROI dashboard
+  - Cannot see agent performance reports
+  - Sees a simplified dashboard:
+    - My Open Tickets count
+    - My Resolved Tickets count
+    - Raise New Ticket button (prominent)
+    - My recent tickets list
+  - Simplified sidebar:
+    🏠 My Dashboard
+    🎫 My Tickets
+    ➕ Raise Ticket
+    👤 My Profile
+
+3.2 RBAC IMPLEMENTATION
+
+Backend:
+  - JWT payload includes: user_id, email, role, name
+  - FastAPI dependency: get_current_user() → decodes JWT
+  - Role guards:
+    require_admin() → role must be 'admin'
+    require_agent_or_admin() → role in ['admin','agent']
+    require_any_auth() → any valid JWT
+  - Data filtering:
+    Users: all queries filter by user_id = current_user.id
+    Agents: queries filter by assigned group use cases
+    Admins: no filtering, see everything
+
+Frontend:
+  - After login, decode JWT to get role
+  - Store role in Redux auth slice
+  - Route protection:
+    /admin/* → redirect to /dashboard if not admin
+    /sops/* → redirect if not admin
+    /reports/export → hide if user role
+    /logs/audit → hide entirely for users
+  - Render sidebar based on role (3 different sidebar configs)
+  - Hide columns, buttons, and sections based on role
+  - Show "Not authorized" component if URL accessed directly
+
+3.3 LOGIN PAGE SPECIFICATION
+
+  Full-screen login page (no sidebar):
+  - STACK logo + "Service Desk AI Solution" centered
+  - "by Jade Global" in orange below logo
+  - Email field with @jadeglobal.com validation
+    (show error inline if domain not @jadeglobal.com)
+  - Password field with show/hide toggle
+  - "Sign In" button (navy background, orange hover)
+  - Below button: "Sign in with Google Workspace" button
+    (Google SSO — only allow @jadeglobal.com accounts)
+  - Error states:
+    Wrong password: "Invalid credentials. Please try again."
+    Wrong domain: "Access restricted to Jade Global employees."
+    Account inactive: "Your account has been deactivated."
+  - After login: redirect based on role:
+    admin/agent → /dashboard (full dashboard)
+    user → /my-dashboard (simplified user dashboard)
+
+════════════════════════════════════════════════════════════
+SECTION 4 — COMPLETE PROJECT STRUCTURE
+════════════════════════════════════════════════════════════
+
+stack-service-desk/
+├── backend/
+│   ├── main.py
+│   ├── requirements.txt
+│   ├── .env.example
+│   ├── alembic/
+│   │   └── versions/
+│   ├── app/
+│   │   ├── api/v1/routes/
+│   │   │   ├── auth.py
+│   │   │   ├── tickets.py
+│   │   │   ├── ai_resolution.py
+│   │   │   ├── chat.py
+│   │   │   ├── dashboard.py
+│   │   │   ├── reports.py
+│   │   │   ├── roi.py
+│   │   │   ├── logs.py
+│   │   │   ├── admin.py
+│   │   │   ├── sops.py
+│   │   │   ├── agents.py
+│   │   │   └── users.py
+│   │   ├── core/
+│   │   │   ├── config.py
+│   │   │   ├── security.py
+│   │   │   ├── database.py
+│   │   │   ├── redis_client.py
+│   │   │   ├── elasticsearch_client.py
+│   │   │   └── celery_app.py
+│   │   ├── models/
+│   │   │   ├── ticket.py
+│   │   │   ├── ticket_note.py
+│   │   │   ├── ticket_attachment.py
+│   │   │   ├── ai_resolution.py
+│   │   │   ├── sop.py
+│   │   │   ├── powershell_execution.py
+│   │   │   ├── user.py
+│   │   │   ├── agent.py
+│   │   │   ├── agent_group.py
+│   │   │   ├── agent_group_member.py
+│   │   │   ├── audit_log.py
+│   │   │   ├── api_call_log.py
+│   │   │   ├── chat_session.py
+│   │   │   ├── confidence_threshold.py
+│   │   │   ├── sla_config.py
+│   │   │   └── roi_metric.py
+│   │   ├── schemas/
+│   │   ├── services/
+│   │   │   ├── freshservice_service.py
+│   │   │   ├── graph_api_service.py
+│   │   │   ├── license_service.py
+│   │   │   ├── powershell_service.py
+│   │   │   ├── notification_service.py
+│   │   │   └── sla_service.py
+│   │   ├── ai/
+│   │   │   ├── langchain_agent.py
+│   │   │   ├── rag_pipeline.py
+│   │   │   ├── confidence_scorer.py
+│   │   │   ├── intent_detector.py
+│   │   │   ├── sla_predictor.py
+│   │   │   ├── sop_embedder.py
+│   │   │   └── use_cases/
+│   │   │       ├── sharepoint_agent.py
+│   │   │       ├── license_agent.py
+│   │   │       ├── dl_agent.py
+│   │   │       └── windows_agent.py
+│   │   ├── tasks/
+│   │   │   ├── sla_monitor.py
+│   │   │   ├── roi_calculator.py
+│   │   │   ├── log_shipper.py
+│   │   │   └── ticket_sync.py
+│   │   └── utils/
+│   │       ├── logger.py
+│   │       └── helpers.py
+│
+├── frontend/
+│   ├── package.json
+│   ├── vite.config.js
+│   ├── .env.example
+│   ├── public/stack-logo.png
+│   └── src/
+│       ├── main.jsx
+│       ├── App.jsx
+│       ├── index.css
+│       ├── components/
+│       │   ├── layout/
+│       │   │   ├── AppLayout.jsx
+│       │   │   ├── AdminSidebar.jsx
+│       │   │   ├── AgentSidebar.jsx
+│       │   │   ├── UserSidebar.jsx
+│       │   │   └── TopBar.jsx
+│       │   ├── common/
+│       │   │   ├── SLABadge.jsx
+│       │   │   ├── ConfidenceBadge.jsx
+│       │   │   ├── StatusTag.jsx
+│       │   │   ├── RoleGuard.jsx
+│       │   │   └── ProtectedRoute.jsx
+│       │   └── charts/
+│       │       ├── ResolutionRateChart.jsx
+│       │       ├── TicketTrendChart.jsx
+│       │       ├── SLAComplianceChart.jsx
+│       │       └── ROITrendChart.jsx
+│       ├── pages/
+│       │   ├── Login.jsx
+│       │   ├── admin/
+│       │   │   ├── AdminDashboard.jsx
+│       │   │   ├── AllTickets.jsx
+│       │   │   ├── TicketDetail.jsx
+│       │   │   ├── Logs.jsx
+│       │   │   ├── Reports.jsx
+│       │   │   ├── ROIDashboard.jsx
+│       │   │   ├── AdminConfig.jsx
+│       │   │   └── SOPManager.jsx
+│       │   ├── agent/
+│       │   │   ├── AgentDashboard.jsx
+│       │   │   ├── MyTickets.jsx
+│       │   │   └── TicketDetail.jsx
+│       │   └── user/
+│       │       ├── UserDashboard.jsx
+│       │       ├── MyTickets.jsx
+│       │       ├── RaiseTicket.jsx
+│       │       └── TicketStatus.jsx
+│       ├── store/
+│       │   ├── index.js
+│       │   ├── authSlice.js
+│       │   ├── ticketSlice.js
+│       │   └── dashboardSlice.js
+│       ├── api/
+│       │   ├── axiosClient.js
+│       │   ├── authApi.js
+│       │   ├── ticketApi.js
+│       │   ├── dashboardApi.js
+│       │   ├── reportsApi.js
+│       │   └── adminApi.js
+│       └── hooks/
+│           ├── useAuth.js
+│           ├── useTickets.js
+│           └── useRole.js
+│
+├── chatbot/
+│   ├── main.py
+│   ├── requirements.txt
+│   ├── .env.example
+│   └── app/
+│       ├── google_chat/
+│       │   ├── webhook_handler.py
+│       │   └── card_builder.py
+│       ├── teams/
+│       │   ├── bot_handler.py
+│       │   ├── adaptive_cards.py
+│       │   └── teams_auth.py
+│       ├── shared/
+│       │   ├── conversation_manager.py
+│       │   ├── api_client.py
+│       │   ├── flows/
+│       │   │   ├── base_flow.py
+│       │   │   ├── sharepoint_flow.py
+│       │   │   ├── license_flow.py
+│       │   │   ├── dl_flow.py
+│       │   │   └── windows_flow.py
+│       │   └── message_templates.py
+│       └── auth.py
+│
+├── scripts/
+│   ├── windows/
+│   │   ├── password_reset.ps1
+│   │   ├── printer_fix.ps1
+│   │   ├── software_install.ps1
+│   │   ├── software_uninstall.ps1
+│   │   ├── disk_cleanup.ps1
+│   │   ├── performance_fix.ps1
+│   │   └── network_reset.ps1
+│   └── sop_ingest/
+│       └── ingest_sops.py
+│
+├── sops/
+│   ├── sharepoint_access.md
+│   ├── sharepoint_admin.md
+│   ├── license_bluebeam.md
+│   ├── license_adobe.md
+│   ├── license_o365.md
+│   ├── dl_update.md
+│   └── windows_troubleshooting.md
+│
+├── docker/
+│   ├── docker-compose.yml
+│   ├── backend.Dockerfile
+│   ├── frontend.Dockerfile
+│   └── chatbot.Dockerfile
+│
+├── nginx/
+│   └── nginx.conf
+│
+├── TESTING_GUIDE.md
+└── README.md
+
+════════════════════════════════════════════════════════════
+SECTION 5 — DATABASE SCHEMA (PostgreSQL + pgvector)
+════════════════════════════════════════════════════════════
+
+Database: PostgreSQL 16 with pgvector extension
+ORM: SQLAlchemy async with Alembic migrations
+
+ENUMS:
+  use_case: sharepoint_access, sharepoint_admin,
+    license_bluebeam, license_adobe, license_o365,
+    dl_update, windows_troubleshooting
+  status: open, in_progress, auto_resolved, escalated, closed
+  priority: low, medium, high, urgent
+  source: freshservice, web_dashboard, google_chat,
+          microsoft_teams
+  sla_status: safe, at_risk, breached
+  resolution_type: auto, manual
+  assignment_mode: round_robin, first_available, priority
+  actor_type: user, ai, agent, system
+  note_type: ai_context, resolution_summary,
+             human_note, system_note
+  execution_status: success, failed, timeout, partial
+  decision: auto_resolve, review_after, escalate
+  user_role: admin, agent, user
+  platform: google_chat, microsoft_teams, web_dashboard
+
+TABLE: users
+  user_id UUID PK DEFAULT gen_random_uuid()
+  email VARCHAR UNIQUE NOT NULL
+    CONSTRAINT email_domain CHECK (email LIKE '%@jadeglobal.com')
+  full_name VARCHAR NOT NULL
+  role user_role ENUM DEFAULT 'user'
+  department VARCHAR
+  device_name VARCHAR
+  device_ip VARCHAR
+  google_workspace_id VARCHAR NULLABLE
+  teams_user_id VARCHAR NULLABLE
+  freshservice_requester_id VARCHAR NULLABLE
+  is_active BOOLEAN DEFAULT TRUE
+  password_hash VARCHAR NOT NULL
+  last_login TIMESTAMP NULLABLE
+  created_at TIMESTAMP DEFAULT NOW()
+  updated_at TIMESTAMP
+
+TABLE: agents
+  agent_id UUID PK DEFAULT gen_random_uuid()
+  user_id UUID FK → users.user_id UNIQUE
+  freshservice_agent_id VARCHAR
+  is_active BOOLEAN DEFAULT TRUE
+  created_at TIMESTAMP DEFAULT NOW()
+  (agent = user with role='agent' or role='admin'
+   this table extends users for agent-specific data)
+
+TABLE: tickets
+  ticket_id UUID PK DEFAULT gen_random_uuid()
+  freshservice_ticket_id VARCHAR UNIQUE NULLABLE
+  title VARCHAR NOT NULL
+  description TEXT
+  use_case use_case ENUM NOT NULL
+  status status ENUM DEFAULT 'open'
+  priority priority ENUM DEFAULT 'medium'
+  sla_deadline TIMESTAMP
+  sla_status sla_status ENUM DEFAULT 'safe'
+  sla_breach_predicted BOOLEAN DEFAULT FALSE
+  created_at TIMESTAMP DEFAULT NOW()
+  updated_at TIMESTAMP
+  closed_at TIMESTAMP NULLABLE
+  source source ENUM NOT NULL
+  user_id UUID FK → users.user_id
+  assigned_agent_id UUID FK → users.user_id NULLABLE
+  resolution_type resolution_type ENUM NULLABLE
+
+TABLE: ticket_notes
+  note_id UUID PK
+  ticket_id UUID FK → tickets.ticket_id CASCADE DELETE
+  note_type note_type ENUM
+  content TEXT NOT NULL
+  created_by UUID FK → users.user_id
+  is_internal BOOLEAN DEFAULT FALSE
+    (internal=TRUE: only visible to agents/admins)
+  created_at TIMESTAMP DEFAULT NOW()
+
+TABLE: ticket_attachments
+  attachment_id UUID PK
+  ticket_id UUID FK → tickets.ticket_id CASCADE DELETE
+  file_name VARCHAR
+  file_path VARCHAR
+  file_size INTEGER
+  uploaded_by UUID FK → users.user_id
+  uploaded_at TIMESTAMP DEFAULT NOW()
+
+TABLE: ai_resolutions
+  resolution_id UUID PK
+  ticket_id UUID FK → tickets.ticket_id
+  intent_detected VARCHAR
+  root_cause TEXT
+  sop_matched UUID FK → sops.sop_id NULLABLE
+  confidence_score FLOAT
+  intent_clarity_score FLOAT
+  sop_match_score FLOAT
+  historical_success_score FLOAT
+  input_completeness_score FLOAT
+  decision decision ENUM
+  resolution_steps JSONB
+  execution_status execution_status ENUM
+  execution_output TEXT
+  time_taken_seconds INTEGER
+  created_at TIMESTAMP DEFAULT NOW()
+
+TABLE: sops
+  sop_id UUID PK
+  title VARCHAR NOT NULL
+  use_case use_case ENUM NOT NULL
+  content TEXT NOT NULL
+  embedding_vector VECTOR(1536)
+  version VARCHAR DEFAULT '1.0'
+  is_active BOOLEAN DEFAULT TRUE
+  created_by UUID FK → users.user_id NULLABLE
+  created_at TIMESTAMP DEFAULT NOW()
+  updated_at TIMESTAMP
+
+TABLE: powershell_executions
+  execution_id UUID PK
+  ticket_id UUID FK → tickets.ticket_id
+  resolution_id UUID FK → ai_resolutions.resolution_id
+  device_name VARCHAR
+  device_ip VARCHAR
+  script_name VARCHAR
+  script_content TEXT
+  execution_status execution_status ENUM
+  output_log TEXT
+  executed_at TIMESTAMP DEFAULT NOW()
+  duration_seconds INTEGER
+
+TABLE: agent_groups
+  group_id UUID PK
+  group_name VARCHAR NOT NULL
+  use_case use_case ENUM NOT NULL
+  assignment_mode assignment_mode ENUM DEFAULT 'round_robin'
+  freshservice_group_id VARCHAR NULLABLE
+  created_at TIMESTAMP DEFAULT NOW()
+
+TABLE: agent_group_members
+  member_id UUID PK
+  group_id UUID FK → agent_groups.group_id
+  user_id UUID FK → users.user_id
+  priority_order INTEGER DEFAULT 1
+  joined_at TIMESTAMP DEFAULT NOW()
+
+TABLE: audit_logs
+  log_id UUID PK
+  ticket_id UUID FK → tickets.ticket_id NULLABLE
+  event_type VARCHAR NOT NULL
+  actor_id UUID FK → users.user_id NULLABLE
+  actor_type actor_type ENUM
+  details JSONB
+  ip_address VARCHAR
+  platform platform ENUM NULLABLE
+  created_at TIMESTAMP DEFAULT NOW()
+
+TABLE: api_call_logs
+  api_log_id UUID PK
+  ticket_id UUID FK → tickets.ticket_id NULLABLE
+  api_name VARCHAR NOT NULL
+  endpoint VARCHAR
+  method VARCHAR
+  request_payload JSONB
+  response_status INTEGER
+  response_payload JSONB
+  duration_ms INTEGER
+  called_at TIMESTAMP DEFAULT NOW()
+
+TABLE: chat_sessions
+  session_id UUID PK
+  user_id UUID FK → users.user_id
+  ticket_id UUID FK → tickets.ticket_id NULLABLE
+  platform platform ENUM NOT NULL
+  messages JSONB
+  current_flow VARCHAR NULLABLE
+  current_step INTEGER DEFAULT 0
+  collected_data JSONB
+  session_start TIMESTAMP DEFAULT NOW()
+  session_end TIMESTAMP NULLABLE
+
+TABLE: confidence_thresholds
+  threshold_id UUID PK
+  use_case use_case ENUM UNIQUE NOT NULL
+  auto_resolve_min FLOAT DEFAULT 85.0
+  review_after_min FLOAT DEFAULT 60.0
+  updated_by UUID FK → users.user_id
+  updated_at TIMESTAMP DEFAULT NOW()
+
+TABLE: sla_configs
+  sla_id UUID PK
+  use_case use_case ENUM NOT NULL
+  priority priority ENUM NOT NULL
+  resolution_hours INTEGER NOT NULL
+  warning_threshold_percent FLOAT DEFAULT 75.0
+  updated_at TIMESTAMP DEFAULT NOW()
+  UNIQUE(use_case, priority)
+
+TABLE: roi_metrics
+  metric_id UUID PK
+  period_start DATE NOT NULL
+  period_end DATE NOT NULL
+  total_tickets INTEGER DEFAULT 0
+  auto_resolved_count INTEGER DEFAULT 0
+  manual_resolved_count INTEGER DEFAULT 0
+  avg_auto_resolution_mins FLOAT
+  avg_manual_resolution_mins FLOAT
+  hours_saved FLOAT
+  cost_saved FLOAT
+  agent_hourly_cost FLOAT DEFAULT 500.0
+  calculated_at TIMESTAMP DEFAULT NOW()
+
+SEED DATA (run on first startup):
+  1. Create admin user:
+     email: admin@jadeglobal.com
+     password: Admin@Stack2025 (bcrypt hashed)
+     role: admin, full_name: STACK Admin
+     is_active: true
+
+  2. Create test user:
+     email: testuser@jadeglobal.com
+     password: Test@Stack2025 (bcrypt hashed)
+     role: user, full_name: Test User
+     department: IT, is_active: true
+
+  3. Create agent accounts for all team members:
+     bhaskar@jadeglobal.com, neha@jadeglobal.com,
+     madhura@jadeglobal.com, yogesh@jadeglobal.com,
+     datta@jadeglobal.com, ajay@jadeglobal.com,
+     ankit@jadeglobal.com, hadi@jadeglobal.com,
+     shameem@jadeglobal.com
+     All with role: agent, password: Agent@Stack2025
+
+  4. Create 4 agent groups:
+     SharePoint Support Group → use_case: sharepoint_access
+       members: bhaskar, neha, madhura, yogesh, datta
+       datta priority_order: 999
+     License Management Group → use_case: license_o365
+       members: neha, madhura, datta
+       datta priority_order: 999
+     DL Management Group → use_case: dl_update
+       members: neha, madhura, datta
+       datta priority_order: 999
+     L2 Windows Support Group → use_case: windows_troubleshooting
+       members: ajay, ankit, hadi, shameem, datta
+       datta priority_order: 999
+
+  5. Default confidence thresholds (85/60) for all 7 use cases
+
+  6. Default SLA configs:
+     All use cases, low: 8h, medium: 4h, high: 2h, urgent: 1h
+
+  7. Ingest all 7 SOPs from /sops/ directory with embeddings
+
+════════════════════════════════════════════════════════════
+SECTION 6 — BACKEND: FastAPI APPLICATION
+════════════════════════════════════════════════════════════
+
+Python 3.11+, FastAPI, async SQLAlchemy, Alembic
+Packages: fastapi, uvicorn, sqlalchemy[asyncio], asyncpg,
+  alembic, pydantic, pydantic-settings, celery, redis,
+  elasticsearch, langchain, langchain-openai, openai,
+  pgvector, pywinrm, paramiko, httpx, python-jose[cryptography],
+  passlib[bcrypt], python-multipart, msal, boto3
+
+6.1 ENVIRONMENT VARIABLES (.env.example)
+  DATABASE_URL=postgresql+asyncpg://stack:stack@localhost/stackdb
+  REDIS_URL=redis://localhost:6379/0
+  ELASTICSEARCH_URL=http://localhost:9200
+  
+  AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com
+  AZURE_OPENAI_API_KEY=your-key
+  AZURE_OPENAI_DEPLOYMENT=gpt-4o
+  AZURE_OPENAI_EMBEDDING_DEPLOYMENT=text-embedding-3-large
+  AZURE_OPENAI_API_VERSION=2024-02-01
+  
+  FRESHSERVICE_BASE_URL=https://yourdomain.freshservice.com
+  FRESHSERVICE_API_KEY=your-key
+  
+  GRAPH_API_TENANT_ID=your-tenant-id
+  GRAPH_API_CLIENT_ID=your-client-id
+  GRAPH_API_CLIENT_SECRET=your-secret
+  
+  GOOGLE_CLIENT_ID=your-google-client-id
+  GOOGLE_CLIENT_SECRET=your-google-secret
+  GOOGLE_CHAT_SERVICE_ACCOUNT_FILE=./service_account.json
+  
+  TEAMS_APP_ID=your-teams-app-id
+  TEAMS_APP_PASSWORD=your-teams-app-password
+  TEAMS_TENANT_ID=your-tenant-id
+  
+  JWT_SECRET_KEY=your-super-secret-key-min-32-chars
+  JWT_ALGORITHM=HS256
+  JWT_EXPIRE_MINUTES=480
+  
+  ALLOWED_EMAIL_DOMAIN=jadeglobal.com
+  
+  WINRM_USERNAME=domain\\administrator
+  WINRM_PASSWORD=your-winrm-password
+  
+  AGENT_HOURLY_COST=500.0
+  AVG_MANUAL_RESOLUTION_MINS=45.0
+  
+  FRONTEND_URL=http://localhost:3000
+  CHATBOT_WEBHOOK_SECRET=your-webhook-secret
+
+6.2 AUTHENTICATION & AUTHORIZATION
+
+  Domain validation (apply everywhere):
+    def validate_jadeglobal_domain(email: str):
+      domain = email.split('@')[-1].lower()
+      if domain != settings.ALLOWED_EMAIL_DOMAIN:
+        raise HTTPException(403,
+          "Access restricted to Jade Global employees only.")
+
+  Password auth (for web dashboard login):
+    POST /api/v1/auth/login
+      body: {email, password}
+      1. Validate @jadeglobal.com domain
+      2. Look up user by email
+      3. Verify bcrypt password hash
+      4. Check is_active = True
+      5. Generate JWT: {user_id, email, role, name, exp}
+      6. Update last_login timestamp
+      7. Return: {access_token, token_type, user: {id,email,role,name}}
+
+  Google OAuth (for "Sign in with Google"):
+    GET /api/v1/auth/google
+    GET /api/v1/auth/google/callback
+      1. Receive Google token
+      2. Verify email ends with @jadeglobal.com
+      3. Create user if not exists (role: user by default)
+      4. Generate JWT same as above
+
+  JWT middleware (get_current_user dependency):
+    Decode JWT → load user from DB → return UserSchema
+    Raise 401 if token invalid/expired
+    Raise 403 if user is_active = False
+
+  RBAC dependencies:
+    require_admin = Depends(get_current_user) + check role=='admin'
+    require_agent_or_admin = check role in ['admin','agent']
+    require_authenticated = any valid JWT
+
+  Token refresh:
+    POST /api/v1/auth/refresh
+    GET  /api/v1/auth/me → returns current user profile
+
+6.3 ALL API ROUTES
+
+AUTH:
+  POST /api/v1/auth/login
+  POST /api/v1/auth/refresh
+  GET  /api/v1/auth/me
+  GET  /api/v1/auth/google
+  GET  /api/v1/auth/google/callback
+  POST /api/v1/auth/logout
+
+TICKETS (role-filtered):
+  GET    /api/v1/tickets
+    admin/agent: all tickets with filters
+    user: only own tickets
+  POST   /api/v1/tickets (any authenticated)
+  GET    /api/v1/tickets/{id}
+    user: only if ticket.user_id == current_user.id
+  PATCH  /api/v1/tickets/{id} (agent/admin only)
+  DELETE /api/v1/tickets/{id} (admin only)
+  POST   /api/v1/tickets/{id}/resolve (agent/admin)
+  POST   /api/v1/tickets/{id}/escalate (agent/admin)
+  GET    /api/v1/tickets/{id}/notes
+    user: only non-internal notes
+    agent/admin: all notes
+  POST   /api/v1/tickets/{id}/notes
+  GET    /api/v1/tickets/{id}/timeline (agent/admin)
+  POST   /api/v1/tickets/freshservice-webhook (no auth, verify secret)
+
+CHAT (any authenticated):
+  POST /api/v1/chat/message
+    ← PRIYANKA'S PRIMARY INTEGRATION POINT
+    Accepts messages from Google Chat AND Microsoft Teams
+    body: {
+      user_id: string,
+      session_id: string,
+      message: string,
+      platform: "google_chat"|"microsoft_teams"|"web_dashboard",
+      context: {
+        flow: string (optional),
+        step: int (optional),
+        collected_data: object (optional)
+      }
+    }
+    response: {
+      reply: string,
+      reply_type: "text"|"card"|"options",
+      options: [string] (if reply_type=options),
+      ticket_id: string (if ticket created/found),
+      action_taken: string,
+      requires_input: boolean,
+      input_prompt: string,
+      session_id: string,
+      platform_card: object (Google/Teams specific card JSON)
+    }
+
+DASHBOARD (admin/agent):
+  GET /api/v1/dashboard/summary
+  GET /api/v1/dashboard/live-queue
+  GET /api/v1/dashboard/sla-at-risk
+  GET /api/v1/dashboard/recent-activity
+
+USER DASHBOARD (user role):
+  GET /api/v1/dashboard/my-summary
+    Returns: {my_open, my_resolved, my_sla_breached}
+
+REPORTS (admin/agent - export admin only):
+  GET /api/v1/reports/resolution-rate
+  GET /api/v1/reports/sla-compliance
+  GET /api/v1/reports/agent-performance
+  GET /api/v1/reports/ticket-trends
+  GET /api/v1/reports/ai-accuracy
+  GET /api/v1/reports/export (admin only)
+
+ROI (admin only):
+  GET   /api/v1/roi/current
+  GET   /api/v1/roi/history
+  POST  /api/v1/roi/recalculate
+  PATCH /api/v1/roi/settings
+
+LOGS (admin only):
+  GET /api/v1/logs/audit
+  GET /api/v1/logs/api-calls
+  GET /api/v1/logs/powershell
+  GET /api/v1/logs/search
+
+ADMIN (admin only):
+  GET/PATCH /api/v1/admin/thresholds
+  GET/PATCH /api/v1/admin/thresholds/{use_case}
+  GET/PATCH /api/v1/admin/sla-configs
+  GET/PATCH /api/v1/admin/groups
+  GET/PATCH /api/v1/admin/groups/{id}
+  GET/POST/PATCH/DELETE /api/v1/admin/users
+  GET /api/v1/admin/system-health
+
+SOPS (admin only):
+  GET    /api/v1/sops
+  POST   /api/v1/sops (with file upload)
+  GET    /api/v1/sops/{id}
+  PATCH  /api/v1/sops/{id}
+  DELETE /api/v1/sops/{id}
+  POST   /api/v1/sops/search
+
+════════════════════════════════════════════════════════════
+SECTION 7 — AI & INTELLIGENCE ENGINE
+════════════════════════════════════════════════════════════
+
+(Same as previous prompt Section 6 — fully retain all
+AI logic, confidence scoring, RAG pipeline, LangChain agents,
+SLA predictor, escalation engine, all 4 use case agents.
+Key addition: source field now includes 'microsoft_teams'
+The AI engine is platform-agnostic — same logic regardless
+of whether ticket came from Google Chat, Teams, or web.)
+
+7.1 CONFIDENCE SCORER — 4 weighted factors:
+  Intent Clarity    30%
+  SOP Match         35%
+  Historical Success 25%
+  Input Completeness 10%
+
+  Thresholds (from confidence_thresholds table):
+  >= auto_resolve_min → auto_resolve
+  >= review_after_min → review_after
+  < review_after_min  → escalate
+
+7.2 RAG PIPELINE:
+  Azure OpenAI text-embedding-3-large (1536 dims)
+  pgvector cosine similarity search
+  Return top 3 matching SOPs as LangChain context
+  Cache in Redis (TTL: 1 hour)
+
+7.3 LANGCHAIN AGENTS (all 4 use cases — full implementation):
+  UC-01 SharePoint: Microsoft Graph API
+  UC-02 License: Adobe API + BlueBeam API + Graph API
+  UC-03 DL Updates: Microsoft Graph API
+  UC-04 Windows: PowerShell/WinRM (pywinrm)
+
+7.4 SLA PREDICTOR: Celery task every 5 minutes
+7.5 ESCALATION ENGINE: round_robin/first_available/priority
+    Datta fallback in all 4 groups (priority_order=999)
+
+════════════════════════════════════════════════════════════
+SECTION 8 — CHATBOT: GOOGLE CHAT + MICROSOFT TEAMS
+════════════════════════════════════════════════════════════
+
+CRITICAL DESIGN PRINCIPLE:
+Both bots use IDENTICAL conversation flows, IDENTICAL responses,
+and IDENTICAL logic. The only difference is the message format
+(Google Chat Cards vs Teams Adaptive Cards).
+All bot logic lives in chatbot/app/shared/
+Platform-specific files only handle message formatting.
+Both bots call the SAME /api/v1/chat/message endpoint.
+
+8.1 SHARED CONVERSATION LOGIC (shared/)
+
+conversation_manager.py:
+  Manages state in Redis:
+    Key: "chat_session:{platform}:{user_id}"
+    Value: {flow, step, collected_data, ticket_id, 
+            last_active, user_name}
+    TTL: 30 minutes (reset on each message)
+
+  Flow router:
+    detect_intent(message) → returns flow name
+    Keywords that trigger flows:
+      sharepoint, share point, sp, site → sharepoint_flow
+      license, bluebeam, adobe, o365, microsoft → license_flow
+      distribution, dl, mailing list, group → dl_flow
+      password, printer, software, slow, disk, 
+      network, wifi, install → windows_flow
+      status, ticket, check → status_check
+      hi, hello, help, start → welcome
+
+message_templates.py:
+  Define ALL messages as constants (used by both platforms):
+
+  WELCOME = """
+  👋 Hi {name}! I'm STACK AI — your IT service desk assistant
+  by Jade Global Software.
+
+  I can help you with:
+  1️⃣ SharePoint access or admin requests
+  2️⃣ Software license requests (BlueBeam / Adobe / O365)
+  3️⃣ Distribution list updates
+  4️⃣ Windows troubleshooting
+
+  What do you need help with today?
+  """
+
+  TICKET_CREATED = """
+  ✅ Your ticket has been created!
+  
+  🎫 Ticket ID: {ticket_id}
+  📋 Category: {use_case}
+  ⏱️ Expected resolution: {sla_hours} hours
+  
+  I'm analyzing your request now...
+  """
+
+  AI_RESOLVING = """
+  🤖 STACK AI is working on your request...
+  Confidence Score: {score}%
+  Matched SOP: {sop_title}
+  """
+
+  AUTO_RESOLVED = """
+  ✅ Your request has been resolved automatically!
+  
+  What was done: {resolution_summary}
+  ⏱️ Time taken: {time_taken} minutes
+  🎫 Ticket: {ticket_id}
+  
+  Was this helpful?
+  """
+
+  ESCALATED = """
+  👤 Your request needs attention from our support team.
+  
+  🎫 Ticket: {ticket_id}
+  👨‍💼 Assigned to: {agent_name} ({group_name})
+  ⏱️ Expected response: within {sla_hours} hours
+  
+  The agent has full context of your request.
+  """
+
+  SLA_WARNING = """
+  ⚠️ Heads up! Your ticket {ticket_id} is at risk of 
+  missing its SLA deadline.
+  Deadline: {deadline}
+  Please expect an update soon.
+  """
+
+  (Define similar templates for all flow steps)
+
+flows/base_flow.py:
+  Abstract base class all flows inherit from:
+    get_next_message(step, collected_data) → str
+    process_input(step, user_input) → (next_step, updated_data)
+    is_complete(step) → bool
+    get_summary(collected_data) → dict (ticket payload)
+
+flows/sharepoint_flow.py:
+  Step 0: Ask: Access request or Admin request? (options)
+  Step 1 (access): Ask: Grant access or Revoke access? (options)
+  Step 1 (admin): Ask: Site creation, Settings change, 
+                  or Ownership transfer? (options)
+  Step 2: Ask for SharePoint site URL
+  Step 3: Ask for user email(s) affected
+  Step 4: Ask for business justification
+  Step 5: Show summary → confirm? (Yes/No)
+  Step 6: Submit → show ticket created message
+  Complete: return ticket payload for /api/v1/tickets
+
+flows/license_flow.py:
+  Step 0: Which license? (BlueBeam / Adobe / O365) (options)
+  Step 1: Assign or Revoke? (options)
+  Step 2: Your email? (pre-fill from user profile)
+  Step 3: Business justification?
+  Step 4: Confirm summary
+  Step 5: Submit → show ticket created
+
+flows/dl_flow.py:
+  Step 0: Action? (Add member/Remove member/
+          Create DL/Modify DL) (options)
+  Step 1: Distribution list name or email?
+  Step 2: User email(s) to add/remove?
+  Step 3: Confirm
+  Step 4: Submit
+
+flows/windows_flow.py:
+  Step 0: Issue type? (Password Reset / Printer /
+          Software Install / Software Uninstall /
+          Slow Performance / Disk Space / 
+          Network Issue) (options)
+  Step 1: Device name?
+  Step 2: Describe the issue briefly
+  Step 3: Confirm
+  Step 4: Submit → show "AI connecting to device..."
+  Step 5: Show resolution result
+
+api_client.py:
+  HTTP client that calls Nikhil's backend:
+    send_message(payload) → POST /api/v1/chat/message
+    get_ticket_status(ticket_id) → GET /api/v1/tickets/{id}
+    All calls include bot service account JWT
+    Retry 3 times on failure with exponential backoff
+
+8.2 GOOGLE CHAT BOT (google_chat/)
+
+webhook_handler.py:
+  POST /webhook/google-chat
+  Verify request from Google (X-Goog-Signature header)
+  Handle event types:
+    MESSAGE → extract text, sender → call shared flow
+    ADDED_TO_SPACE → send welcome card
+    CARD_CLICKED → handle button click
+    REMOVED_FROM_SPACE → cleanup Redis session
+
+card_builder.py:
+  Build Google Chat Card v2 JSON for all message types:
+
+  build_welcome_card(user_name) → Card with 4 buttons
+  build_options_card(title, options) → Card with buttons
+  build_ticket_card(ticket_id, use_case, sla) → Info card
+  build_resolution_card(summary, time_taken) → Success card
+  build_escalation_card(agent, group, sla) → Info card
+  build_status_card(ticket) → Status card with progress
+  build_confirmation_card(summary) → Yes/No card
+
+  All cards use STACK colors (#1B3A6B header, #F47920 accents)
+
+8.3 MICROSOFT TEAMS BOT (teams/)
+
+bot_handler.py:
+  Use Bot Framework SDK (botbuilder-core, botbuilder-integration-aiohttp)
+  POST /webhook/teams
+  Handle activities:
+    message → extract text, from.id → call shared flow
+    conversationUpdate → send welcome on bot add
+    
+  Microsoft Teams App registration:
+    App ID: TEAMS_APP_ID
+    App Password: TEAMS_APP_PASSWORD
+    Bot endpoint: https://your-domain/webhook/teams
+
+teams_auth.py:
+  Validate Teams activity JWT token
+  Extract user UPN (email) from token
+  Map Teams user to STACK user by email
+  Create user if not exists (validate @jadeglobal.com)
+
+adaptive_cards.py:
+  Build Microsoft Adaptive Cards JSON for all message types:
+  (Adaptive Cards are Teams equivalent of Google Chat Cards)
+
+  build_welcome_card(user_name) → Adaptive Card with actions
+  build_options_card(title, options) → Card with action buttons
+  build_ticket_card(ticket_data) → Info card
+  build_resolution_card(summary) → Success card
+  build_escalation_card(agent_data) → Info card
+  build_status_card(ticket) → Card with status badge
+  build_confirmation_card(summary) → Confirm/Cancel card
+
+  Adaptive Cards MUST match the information and structure
+  of Google Chat cards exactly — same data, same flow,
+  just different JSON schema.
+
+8.4 BOT RESPONSE CONSISTENCY RULES:
+  Both bots MUST:
+  - Ask questions in the same order
+  - Show the same information in confirmation messages
+  - Use the same ticket IDs and status labels
+  - Send resolution summaries with the same content
+  - Use identical error messages
+  - Show SLA information identically
+  
+  The /api/v1/chat/message endpoint handles all logic.
+  Bots are just renderers — they convert API responses
+  to platform-specific card formats.
+
+════════════════════════════════════════════════════════════
+SECTION 9 — REACT FRONTEND (ROLE-BASED UI)
+════════════════════════════════════════════════════════════
+
+Stack: React 18 + Vite + Ant Design 5 + Redux Toolkit
+       + Axios + React Query + ECharts
+
+9.1 LOGIN PAGE (Login.jsx)
+  Full-screen, centered layout
+  STACK logo (large, centered)
+  "Service Desk AI Solution" subtitle
+  "by Jade Global" in orange
+  
+  Form:
+    Email field: validate @jadeglobal.com on blur
+      Inline error: "Only @jadeglobal.com emails allowed"
+    Password field: show/hide toggle
+    Sign In button: navy background
+    Divider: "or"
+    Sign in with Google button: Google colors + icon
+  
+  Error handling:
+    Invalid credentials → red alert above form
+    Wrong domain → orange warning above form
+    Account inactive → info alert with contact message
+  
+  After success: redirect based on role
+    admin → /dashboard
+    agent → /dashboard  
+    user  → /my-dashboard
+
+9.2 PROTECTED ROUTES
+  ProtectedRoute.jsx:
+    Checks Redux auth state (has valid JWT + not expired)
+    If not authenticated → redirect to /login
+    
+  RoleGuard.jsx:
+    Props: allowedRoles={['admin']} or allowedRoles={['admin','agent']}
+    If user role not in allowedRoles → show 403 component
+    OR redirect to appropriate dashboard
+
+  Route structure:
+    /login → Login.jsx (public)
+    /dashboard → AdminDashboard or AgentDashboard 
+                 (based on role)
+    /my-dashboard → UserDashboard (user role only)
+    /tickets → AllTickets (admin/agent)
+    /my-tickets → MyTickets (user)
+    /tickets/:id → TicketDetail
+    /logs → Logs (admin only)
+    /reports → Reports (admin/agent)
+    /roi → ROIDashboard (admin only)
+    /admin → AdminConfig (admin only)
+    /sops → SOPManager (admin only)
+    /raise-ticket → RaiseTicket (user)
+    /* → 404 component
+
+9.3 ADMIN/AGENT SIDEBAR (AdminSidebar.jsx)
+  STACK logo at top (white version on navy)
+  
+  Navigation:
+    🏠 Dashboard        → /dashboard
+    🎫 All Tickets      → /tickets
+    📋 Audit Logs       → /logs      [admin only - hide for agent]
+    📊 Reports          → /reports
+    💰 ROI Dashboard    → /roi       [admin only]
+    ⚙️ Admin Config     → /admin     [admin only]
+    📄 SOP Manager      → /sops      [admin only]
+  
+  Bottom: user avatar + name + role badge + logout
+
+9.4 USER SIDEBAR (UserSidebar.jsx)
+  Same STACK logo
+  Navigation:
+    🏠 My Dashboard     → /my-dashboard
+    🎫 My Tickets       → /my-tickets
+    ➕ Raise Ticket     → /raise-ticket
+    👤 My Profile       → /profile
+  Bottom: user avatar + name + logout
+
+9.5 ADMIN DASHBOARD (AdminDashboard.jsx)
+  KPI Cards (4, top row):
+    Open Tickets | Resolved Today | SLA Met % | Auto-Resolution %
+  
+  Charts row:
+    Ticket volume by use case (bar - ECharts)
+    Resolution type pie (auto vs manual)
+  
+  Live SLA Risk table (auto-refresh 30s):
+    Ticket ID | Title | Use Case | Priority | 
+    Deadline | SLA Status (badge) | AI Confidence
+  
+  Recent Activity feed (last 20 audit events)
+
+9.6 USER DASHBOARD (UserDashboard.jsx)
+  Simplified — only user's own data:
+  
+  Top: "Welcome back, {name}! 👋"
+  
+  KPI Cards (3):
+    My Open Tickets | My Resolved Tickets | My Avg Resolution Time
+  
+  Prominent button: "➕ Raise New Ticket" (orange, large)
+  
+  My Recent Tickets table (last 5):
+    Title | Category | Status | Created | Actions (View)
+  
+  No charts, no admin data, no other users' info
+
+9.7 RAISE TICKET PAGE (RaiseTicket.jsx) [user only]
+  Multi-step form wizard:
+  
+  Step 1: Select category (4 large cards to pick from):
+    SharePoint | License Request | DL Update | Windows Issue
+    Each card has icon + description
+  
+  Step 2: Fill details (dynamic based on category):
+    SharePoint: access type, site URL, justification
+    License: license type, assign/revoke, justification
+    DL Update: action, DL name, user emails
+    Windows: issue type, device name, description
+  
+  Step 3: Priority selection (Low/Medium/High/Urgent)
+  Step 4: Review and confirm
+  Step 5: Submit → show ticket ID + "AI is working on this"
+  
+  Poll ticket status every 10 seconds after submit:
+    Show live status: "AI Analyzing → Auto-Resolving → Resolved"
+    Or: "Escalated to [Agent Name]"
+
+9.8 ALL TICKETS PAGE (AllTickets.jsx) [admin/agent]
+  Filter bar: status, use_case, priority, sla_status,
+              date range, search, assigned_to
+  
+  Table columns:
+    # | Title | Use Case (tag) | Status (colored) |
+    Priority | SLA Risk (badge) | AI Confidence % |
+    Assigned Agent | Source (icon) | Created | Actions
+  
+  Source icons: 🌐 Web | 💬 Google Chat | 🟦 Teams | 📧 Freshservice
+  
+  Actions per row: View | AI Resolve | Escalate | Close
+  Bulk actions: Close selected | Export selected
+
+9.9 TICKET DETAIL PAGE (TicketDetail.jsx)
+  Header: ticket title + status badge + priority
+  
+  Info grid (2 columns):
+    Left: use_case, source, user, created_at, updated_at
+    Right: SLA deadline, SLA status, assigned agent, 
+           resolution_type
+  
+  AI Resolution panel (admin/agent only):
+    Confidence score: circular gauge (color coded)
+    Sub-scores: 4 mini progress bars with labels
+    Decision badge: auto_resolve/review_after/escalate
+    Resolution steps: numbered list (expandable)
+    Execution output: code block (scrollable)
+  
+  Notes timeline:
+    All notes in chronological order
+    Internal notes shown only to agent/admin
+    User comments shown to all
+    Color coded by note_type
+  
+  Audit trail (admin/agent only):
+    Full event history for this ticket
+    Expandable JSON details per event
+  
+  Actions panel:
+    Admin/Agent: Add Note | AI Resolve | Escalate | Close
+    User: Add Comment | View Status only
+
+9.10 LOGS PAGE (Logs.jsx) [admin only]
+  3 tabs: Audit Logs | API Call Logs | PowerShell Executions
+  Search + date range + filter on each tab
+  Click to expand full details
+
+9.11 REPORTS PAGE (Reports.jsx) [admin/agent]
+  Date range picker (default 30 days)
+  Export CSV button (admin only - hidden for agents)
+  
+  6 sections:
+  1. Resolution Rate by Use Case (bar chart + table)
+  2. SLA Compliance (donut + line chart over time)
+  3. Average Resolution Time (AI vs Human bar chart)
+  4. AI Accuracy Analytics (confidence distribution)
+  5. Ticket Trends (area chart by use case over time)
+  6. Agent Performance (table - agent/admin)
+
+9.12 ROI DASHBOARD (ROIDashboard.jsx) [admin only]
+  Banner: "STACK has saved Jade Global {hours} hours 
+          and ₹{cost} this month"
+  
+  KPI cards: Auto-Resolved | Hours Saved | Cost Saved | 
+             Agent Capacity Freed
+  
+  Charts: Monthly ROI Trend | Cost Per Ticket comparison
+  
+  Payback Period indicator (progress bar)
+  
+  Settings (admin): Agent hourly cost + manual resolution 
+                    time inputs
+
+9.13 ADMIN CONFIG PAGE (AdminConfig.jsx) [admin only]
+  4 tabs:
+  
+  Confidence Thresholds:
+    Per use_case table, editable auto_resolve_min 
+    and review_after_min with save
+
+  SLA Configuration:
+    Grid: use_case × priority → resolution_hours
+
+  Agent Groups:
+    4 group cards with member lists + assignment mode dropdown
+    Datta highlighted with "Fallback" gold badge
+
+  User Management:
+    Table of all users + roles
+    Add user, edit role, activate/deactivate
+    Cannot delete admin@jadeglobal.com
+
+════════════════════════════════════════════════════════════
+SECTION 10 — DOCKER COMPOSE
+════════════════════════════════════════════════════════════
+
+Services: postgres (pgvector/pgvector:pg16), redis:7-alpine,
+  elasticsearch:8.12.0, kibana:8.12.0, backend (FastAPI),
+  celery_worker, celery_beat, frontend (React+Nginx),
+  chatbot (Google Chat + Teams webhook), nginx (reverse proxy),
+  grafana, prometheus
+
+Nginx routing:
+  /          → frontend:80
+  /api/      → backend:8000
+  /webhook/  → chatbot:8001
+  /kibana/   → kibana:5601
+  /grafana/  → grafana:3000
+  /docs      → backend:8000/docs (Swagger)
+
+All services: restart: unless-stopped
+Add healthchecks for postgres, redis, elasticsearch
+
+════════════════════════════════════════════════════════════
+SECTION 11 — SOP DOCUMENTS (7 files)
+════════════════════════════════════════════════════════════
+
+Create all 7 detailed SOP markdown files:
+  sops/sharepoint_access.md
+  sops/sharepoint_admin.md
+  sops/license_bluebeam.md
+  sops/license_adobe.md
+  sops/license_o365.md
+  sops/dl_update.md
+  sops/windows_troubleshooting.md
+
+Each SOP must include:
+  Title, Use Case, Scope, Prerequisites,
+  Step-by-step resolution procedure (numbered),
+  Required inputs, Expected outputs,
+  Error handling steps, Escalation criteria,
+  Verification steps
+
+ingest_sops.py:
+  Read all 7 SOPs → generate Azure OpenAI embeddings
+  → upsert to sops table
+  Auto-run on backend startup if sops table empty
+
+════════════════════════════════════════════════════════════
+SECTION 12 — TESTING GUIDE (TESTING_GUIDE.md)
+════════════════════════════════════════════════════════════
+
+Create TESTING_GUIDE.md at project root with ALL of:
+
+## 1. SETUP VERIFICATION
+Step-by-step checklist to verify all services are running:
+  □ PostgreSQL running: psql connection test command
+  □ Redis running: redis-cli ping
+  □ Elasticsearch running: curl http://localhost:9200
+  □ Backend running: curl http://localhost/api/v1/health
+  □ Frontend running: open http://localhost
+  □ Kibana running: open http://localhost/kibana
+  □ Grafana running: open http://localhost/grafana
+  □ Bot webhook reachable: curl test command
+
+## 2. AUTHENTICATION TESTS
+Test 1 — Admin Login:
+  URL: http://localhost/login
+  Email: admin@jadeglobal.com
+  Password: Admin@Stack2025
+  Expected: Redirect to /dashboard with full sidebar
+  Verify: Admin sees all menu items including Admin, Logs, ROI
+
+Test 2 — User Login:
+  Email: testuser@jadeglobal.com
+  Password: Test@Stack2025
+  Expected: Redirect to /my-dashboard with simplified sidebar
+  Verify: User does NOT see Admin, Logs, ROI, All Tickets
+
+Test 3 — Wrong Domain Rejection:
+  Email: someone@gmail.com
+  Password: anything
+  Expected: Error "Access restricted to Jade Global employees."
+  Verify: No JWT issued, no access granted
+
+Test 4 — Wrong Password:
+  Email: admin@jadeglobal.com
+  Password: wrongpassword
+  Expected: "Invalid credentials. Please try again."
+
+Test 5 — JWT Expiry:
+  Wait for token to expire (or set JWT_EXPIRE_MINUTES=1)
+  Try accessing /api/v1/tickets
+  Expected: 401 Unauthorized
+  Verify: Frontend redirects to /login
+
+## 3. RBAC VERIFICATION TESTS
+Test 1 — Admin access to restricted pages:
+  Login as admin → navigate to /admin → should load
+  Login as admin → navigate to /logs → should load
+  Login as admin → navigate to /roi → should load
+
+Test 2 — User blocked from admin pages:
+  Login as testuser → manually navigate to /admin
+  Expected: Redirected to /my-dashboard or 403 shown
+
+Test 3 — User sees only own tickets:
+  Login as testuser → go to /my-tickets
+  Verify: Only tickets where user_id = testuser's ID
+
+Test 4 — Agent sees group tickets:
+  Login as an agent → go to /tickets
+  Verify: Sees tickets for their use case groups
+
+## 4. USE CASE TESTING
+
+### UC-01: SharePoint Access Request
+Scenario A — Auto Resolution (High Confidence):
+  Channel: Web Dashboard
+  Login: testuser@jadeglobal.com
+  Navigate to: Raise Ticket
+  Select: SharePoint → Access Request → Grant Access
+  Site URL: https://jadeglobal.sharepoint.com/sites/test
+  User Email: testuser@jadeglobal.com
+  Justification: Testing SharePoint access automation
+  Priority: Medium
+  Submit ticket
+  
+  Expected flow:
+  1. Ticket created with status: open
+  2. AI triage triggers (within 5 seconds)
+  3. Confidence score calculated (verify ≥ 85% shown)
+  4. Microsoft Graph API called to grant access
+  5. Ticket status → auto_resolved
+  6. Note added: AI resolution summary
+  7. User receives notification
+  
+  Verify in admin dashboard:
+  □ Ticket shows as auto_resolved
+  □ Confidence score visible
+  □ Graph API call in api_call_logs
+  □ Audit log shows ai_triage + auto_resolved events
+  □ Elasticsearch log entry exists
+
+Scenario B — Human Escalation (Low Confidence):
+  Submit ticket with vague description: "sharepoint help"
+  No site URL, no specific request type
+  
+  Expected flow:
+  1. Confidence score < 60% (incomplete inputs)
+  2. AI writes context notes to Freshservice
+  3. Ticket assigned to SharePoint Support Group
+  4. Assigned to: Bhaskar/Neha/Madhura/Yogesh/Datta
+  5. Status → escalated
+  6. User notified: agent assigned
+  
+  Verify:
+  □ Ticket status = escalated
+  □ Note type = ai_context added
+  □ assigned_agent_id populated
+  □ Freshservice ticket updated
+
+### UC-02: License Request
+Scenario A — O365 License Assignment:
+  Channel: Google Chat Bot (or Teams)
+  Message: "I need an O365 license"
+  Follow flow: O365 → Assign → justification: new employee
+  
+  Expected:
+  1. Bot asks for license type → O365 selected
+  2. Bot asks assign or revoke → Assign
+  3. Bot collects justification
+  4. Bot shows confirmation card
+  5. User confirms → ticket created
+  6. AI checks: does user already have O365 license?
+     If yes: AI responds "You already have an O365 license"
+     If no: provision via Graph API
+  7. Ticket resolved, user notified in bot
+
+Scenario B — BlueBeam License (Escalation):
+  Submit BlueBeam license request with no justification
+  Expected: Escalated to License Management Group (Neha/Madhura/Datta)
+
+### UC-03: Distribution List Update
+Scenario A — Add Member Auto-Resolved:
+  Channel: Web Dashboard
+  Category: DL Update → Add Member
+  DL Name: finance-team@jadeglobal.com
+  User: testuser@jadeglobal.com
+  
+  Expected:
+  1. AI validates DL exists via Graph API
+  2. If exists: add user via Graph API
+  3. Verify membership via GET groups/{id}/members
+  4. Ticket auto_resolved
+  5. Audit log: powershell_executed (no, Graph API)
+  
+Scenario B — DL Does Not Exist:
+  DL Name: nonexistent-list@jadeglobal.com
+  Expected: AI creates DL first, then adds member
+
+Scenario C — Retry Logic:
+  Simulate Graph API failure (use mock/test mode)
+  Expected: System retries once, then escalates to
+            DL Management Group (Neha/Madhura/Datta)
+
+### UC-04: Windows Troubleshooting
+Scenario A — Disk Cleanup Auto-Resolved:
+  Channel: Microsoft Teams Bot
+  Message: "my laptop is running low on disk space"
+  Device: TESTPC01 (use a real test machine or mock)
+  
+  Expected:
+  1. AI classifies: disk_cleanup
+  2. SOP retrieved: windows_troubleshooting.md
+  3. Confidence ≥ 85% → auto-resolve path
+  4. WinRM session opened to device
+  5. disk_cleanup.ps1 executed
+  6. Output logged to powershell_executions table
+  7. Ticket resolved, user notified in Teams
+
+Scenario B — Password Reset:
+  Message: "I forgot my password / can't login"
+  Expected:
+  1. AI classifies: password_reset
+  2. password_reset.ps1 executed via WinRM
+  3. AD account password reset + unlock
+  4. User notified with temporary password info
+
+Scenario C — WinRM Connection Failure (Escalation):
+  Provide unreachable device name
+  Expected:
+  1. WinRM connection timeout
+  2. execution_status = timeout
+  3. Escalated to L2 Windows Support Group
+     (Ajay/Ankit/Hadi/Shameem/Datta)
+
+## 5. SLA MONITORING TESTS
+Test 1 — SLA Prediction:
+  Create high priority ticket (SLA = 1 hour)
+  Wait 5 minutes (or trigger sla_monitor Celery task manually)
+  Expected: sla_status changes from safe → at_risk
+  Verify: Admin dashboard shows yellow badge on ticket
+  API: GET /api/v1/dashboard/sla-at-risk
+
+Test 2 — SLA Breach:
+  Create urgent ticket, let it sit past SLA deadline
+  Expected: sla_status = breached, red badge
+  Expected: audit_log event: sla_breached
+
+Test 3 — SLA Config Change:
+  Admin → Admin Config → SLA Config
+  Change urgent SharePoint resolution to 30 minutes
+  Create new urgent SharePoint ticket
+  Verify: sla_deadline = now + 30 minutes
+
+## 6. CONFIDENCE THRESHOLD TESTS
+Test 1 — Change threshold:
+  Admin → Admin Config → Confidence Thresholds
+  Change SharePoint Access auto_resolve_min from 85 to 95
+  Submit a normal SharePoint request
+  Expected: Confidence 85-94% now triggers review_after
+            instead of auto_resolve
+
+Test 2 — Verify sub-scores:
+  Submit ticket with:
+    Clear description (intent clarity ↑)
+    All required fields filled (completeness ↑)
+  Verify: confidence_score = weighted sum of 4 sub-scores
+
+## 7. ROI DASHBOARD TESTS
+  Login as admin → /roi
+  Verify: auto_resolved_count matches ticket table
+  Verify: hours_saved = auto_resolved * AVG_MANUAL_MINS / 60
+  Verify: cost_saved = hours_saved * agent_hourly_cost
+  Change agent_hourly_cost → click recalculate
+  Verify: cost_saved updates
+
+## 8. CHATBOT CONSISTENCY TESTS
+  Submit identical ticket via Google Chat Bot
+  Submit identical ticket via Microsoft Teams Bot
+  Submit identical ticket via Web Dashboard
+  
+  Verify all 3 produce:
+  □ Same ticket structure in database
+  □ Same AI response/resolution
+  □ Same notification message content
+  □ Same audit log events
+  
+  Verify source field: google_chat / microsoft_teams / web_dashboard
+
+## 9. API TESTS (Swagger at /docs)
+Test each endpoint:
+  POST /api/v1/auth/login → 200 with JWT
+  GET  /api/v1/tickets (admin JWT) → 200 with all tickets
+  GET  /api/v1/tickets (user JWT) → 200 with only own tickets
+  GET  /api/v1/admin/thresholds (user JWT) → 403 Forbidden
+  POST /api/v1/sops (agent JWT) → 403 Forbidden
+  POST /api/v1/chat/message → 200 with reply
+  GET  /api/v1/dashboard/summary → 200 with KPIs
+  GET  /api/v1/roi/current (user JWT) → 403 Forbidden
+
+## 10. ELASTICSEARCH LOG VERIFICATION
+  After each test above, verify logs in Kibana:
+  URL: http://localhost/kibana
+  Index: stack_audit_logs
+  
+  Check log entries exist for:
+  □ ticket_created
+  □ ai_triage
+  □ auto_resolved OR escalated
+  □ sla_at_risk (after SLA test)
+  □ powershell_executed (after UC-04 test)
+  □ api_called (for each external API call)
+
+## 11. PERFORMANCE TESTS
+  Create 50 tickets rapidly via API
+  Verify: all tickets processed without errors
+  Verify: Celery tasks don't queue up
+  Verify: Elasticsearch receives all 50 log entries
+  Verify: Dashboard updates correctly with 50 tickets
+
+## 12. COMMON ISSUES & TROUBLESHOOTING
+  Issue: "pgvector extension not found"
+  Fix: Run: CREATE EXTENSION IF NOT EXISTS vector;
+       In the stackdb database
+
+  Issue: "Azure OpenAI 401 error"
+  Fix: Check AZURE_OPENAI_API_KEY in .env
+       Verify deployment name matches AZURE_OPENAI_DEPLOYMENT
+
+  Issue: "WinRM connection refused"
+  Fix: Enable WinRM on target: winrm quickconfig
+       Open port 5985 (HTTP) or 5986 (HTTPS) in firewall
+       Set-Item WSMan:\localhost\Client\TrustedHosts -Value "*"
+
+  Issue: "Google Chat webhook 401"
+  Fix: Verify service account JSON file path in .env
+       Ensure bot is added to Google Chat space
+
+  Issue: "Teams bot not responding"
+  Fix: Verify TEAMS_APP_ID and TEAMS_APP_PASSWORD in .env
+       Check bot endpoint registered in Azure Bot Service
+       Ensure /webhook/teams is publicly accessible
+
+  Issue: "Celery tasks not running"
+  Fix: Check Redis connection: redis-cli ping
+       Restart celery worker: docker-compose restart celery_worker
+       Check beat schedule: docker-compose logs celery_beat
+
+════════════════════════════════════════════════════════════
+SECTION 13 — README.md
+════════════════════════════════════════════════════════════
+
+Create comprehensive README.md:
+
+  # STACK Service Desk AI Solution
+  ## by Jade Global Software Pvt Ltd
+  
+  Sections:
+  1. Project overview with key features
+  2. Architecture overview
+  3. Prerequisites (Docker, Python 3.11, Node 18)
+  4. Quick start (docker-compose up --build)
+  5. Environment setup (.env files guide)
+  6. Default accounts table
+  7. Service URLs (dashboard, API docs, Kibana, Grafana)
+  8. Team and roles
+  9. Link to TESTING_GUIDE.md
+  10. Troubleshooting FAQ
+
+════════════════════════════════════════════════════════════
+SECTION 14 — NON-NEGOTIABLE REQUIREMENTS
+════════════════════════════════════════════════════════════
+
+✅ ONLY @jadeglobal.com emails allowed — enforced at 
+   DB level (CHECK constraint) + API level + frontend
+✅ admin@jadeglobal.com and testuser@jadeglobal.com 
+   MUST be seeded on first run
+✅ 3 completely different UI experiences (admin/agent/user)
+✅ Users ONLY see their own tickets — never others
+✅ Admin config pages MUST be inaccessible to users/agents
+✅ Google Chat Bot and Teams Bot MUST produce identical responses
+✅ Both bots use SAME /api/v1/chat/message endpoint
+✅ ALL 4 use case AI agents MUST be fully implemented
+✅ Datta MUST be fallback member in ALL 4 agent groups
+✅ Confidence score MUST use all 4 weighted factors
+✅ SLA monitor MUST run as Celery background task every 5 min
+✅ ALL actions logged to PostgreSQL audit_logs + Elasticsearch
+✅ TESTING_GUIDE.md MUST cover all 12 test sections
+✅ Docker Compose MUST start entire stack with one command
+✅ No hardcoded credentials — all in .env files
+✅ RBAC enforced at BOTH frontend AND backend layers
+✅ JWT includes role — frontend renders based on role
+✅ source field distinguishes: web_dashboard, google_chat,
+   microsoft_teams, freshservice
+✅ Adaptive Cards (Teams) and Chat Cards (Google) must show
+   same information — just different formats
