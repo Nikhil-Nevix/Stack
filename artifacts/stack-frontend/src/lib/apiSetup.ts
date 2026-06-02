@@ -1,7 +1,8 @@
 import { setAuthTokenGetter, setBaseUrl } from "@workspace/api-client-react";
 
 export function setupApi() {
-  setBaseUrl("/api");
+  // OpenAPI already prefixes paths with /api, so avoid double-prefixing.
+  setBaseUrl(null);
   setAuthTokenGetter(() => {
     const saved = localStorage.getItem("stack_auth");
     if (saved) {

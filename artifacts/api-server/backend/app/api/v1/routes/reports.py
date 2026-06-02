@@ -1,4 +1,4 @@
-from datetime import datetime, timezone, timedelta
+from datetime import date, datetime, time, timezone, timedelta
 from typing import Optional
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -72,13 +72,25 @@ async def get_ticket_trends(
     start_date: Optional[str] = None, end_date: Optional[str] = None,
     db: AsyncSession = Depends(get_db), current_user=Depends(require_agent_or_admin)
 ):
+    def parse_iso_date(value: Optional[str]) -> Optional[date]:
+        if not value:
+            return None
+        return date.fromisoformat(value)
+
+    end_day = parse_iso_date(end_date) or datetime.now(timezone.utc).date()
+    start_day = parse_iso_date(start_date) or (end_day - timedelta(days=29))
+
     trend = []
-    for i in range(29, -1, -1):
-        day = (datetime.now(timezone.utc) - timedelta(days=i)).strftime("%Y-%m-%d")
+    current_day = start_day
+    while current_day <= end_day:
+        day_start = datetime.combine(current_day, time.min, tzinfo=timezone.utc)
+        next_day = day_start + timedelta(days=1)
         total = (await db.execute(select(func.count()).select_from(Ticket).where(
-            func.date(Ticket.created_at) == day
+            Ticket.created_at >= day_start,
+            Ticket.created_at < next_day,
         ))).scalar() or 0
-        trend.append({"date": day, "total": total, "by_use_case": {}})
+        trend.append({"date": current_day.strftime("%Y-%m-%d"), "total": total, "by_use_case": {}})
+        current_day += timedelta(days=1)
     return {"trend": trend}
 
 
