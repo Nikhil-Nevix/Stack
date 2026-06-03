@@ -8,6 +8,7 @@ from ....core.security import get_current_user, require_agent_or_admin
 from ....models.user import User
 from ....models.ticket import Ticket
 from ....models.audit_log import AuditLog
+from backend.mock.mock_store import MockStore, mock_store
 
 router = APIRouter()
 
@@ -19,6 +20,9 @@ async def get_dashboard_summary(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_agent_or_admin)
 ):
+    if await MockStore.is_mock():
+        return mock_store.get_dashboard_summary()
+
     today = TODAY_START()
     total_open = (await db.execute(select(func.count()).select_from(Ticket).where(Ticket.status == "open"))).scalar() or 0
     escalated = (await db.execute(select(func.count()).select_from(Ticket).where(Ticket.status == "escalated"))).scalar() or 0
@@ -64,6 +68,17 @@ async def get_my_dashboard_summary(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    if await MockStore.is_mock():
+        user_summary = mock_store.get_dashboard_summary()
+        uid = current_user.user_id
+        tickets = mock_store.get_tickets_for_user(uid)
+        return {
+            "my_open": sum(1 for ticket in tickets if ticket.get("status") in {"open", "in_progress", "escalated"}),
+            "my_resolved": sum(1 for ticket in tickets if ticket.get("status") in {"auto_resolved", "closed"}),
+            "my_sla_breached": sum(1 for ticket in tickets if ticket.get("sla_status") == "breached"),
+            "my_avg_resolution_mins": None,
+        }
+
     uid = current_user.user_id
     my_open = (await db.execute(select(func.count()).select_from(Ticket).where(
         and_(Ticket.user_id == uid, Ticket.status.in_(["open", "in_progress", "escalated"]))
@@ -79,6 +94,13 @@ async def get_my_dashboard_summary(
 
 @router.get("/live-queue")
 async def get_live_queue(db: AsyncSession = Depends(get_db), current_user: User = Depends(require_agent_or_admin)):
+    if await MockStore.is_mock():
+        return [
+            ticket
+            for ticket in mock_store.get_all_tickets()
+            if ticket.get("status") in {"open", "in_progress"}
+        ][:50]
+
     result = await db.execute(
         select(Ticket).where(Ticket.status.in_(["open", "in_progress"])).order_by(Ticket.created_at.desc()).limit(50)
     )
@@ -95,6 +117,9 @@ async def get_live_queue(db: AsyncSession = Depends(get_db), current_user: User 
 
 @router.get("/sla-at-risk")
 async def get_sla_at_risk(db: AsyncSession = Depends(get_db), current_user: User = Depends(require_agent_or_admin)):
+    if await MockStore.is_mock():
+        return mock_store.get_at_risk_tickets()[:20]
+
     result = await db.execute(
         select(Ticket).where(Ticket.sla_status.in_(["at_risk", "breached"])).order_by(Ticket.sla_deadline.asc()).limit(20)
     )
@@ -111,6 +136,9 @@ async def get_sla_at_risk(db: AsyncSession = Depends(get_db), current_user: User
 
 @router.get("/recent-activity")
 async def get_recent_activity(db: AsyncSession = Depends(get_db), current_user: User = Depends(require_agent_or_admin)):
+    if await MockStore.is_mock():
+        return mock_store.get_recent_activity(limit=20)
+
     result = await db.execute(
         select(AuditLog).order_by(AuditLog.created_at.desc()).limit(20)
     )

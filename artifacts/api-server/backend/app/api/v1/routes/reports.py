@@ -7,6 +7,7 @@ from ....core.database import get_db
 from ....core.security import require_agent_or_admin
 from ....models.ticket import Ticket
 from ....models.user import User
+from backend.mock.mock_store import MockStore, mock_store
 
 router = APIRouter()
 
@@ -16,6 +17,9 @@ async def get_resolution_rate(
     start_date: Optional[str] = None, end_date: Optional[str] = None,
     db: AsyncSession = Depends(get_db), current_user=Depends(require_agent_or_admin)
 ):
+    if await MockStore.is_mock():
+        return mock_store.get_resolution_rate()
+
     use_cases = ["sharepoint_access", "sharepoint_admin", "license_bluebeam", "license_adobe",
                  "license_o365", "dl_update", "windows_troubleshooting"]
     items = []
@@ -44,6 +48,9 @@ async def get_sla_compliance(
     start_date: Optional[str] = None, end_date: Optional[str] = None,
     db: AsyncSession = Depends(get_db), current_user=Depends(require_agent_or_admin)
 ):
+    if await MockStore.is_mock():
+        return mock_store.get_sla_compliance()
+
     met = (await db.execute(select(func.count()).select_from(Ticket).where(Ticket.sla_status == "safe"))).scalar() or 0
     breached = (await db.execute(select(func.count()).select_from(Ticket).where(Ticket.sla_status == "breached"))).scalar() or 0
     at_risk = (await db.execute(select(func.count()).select_from(Ticket).where(Ticket.sla_status == "at_risk"))).scalar() or 0
@@ -56,6 +63,9 @@ async def get_sla_compliance(
 
 @router.get("/agent-performance")
 async def get_agent_performance(db: AsyncSession = Depends(get_db), current_user=Depends(require_agent_or_admin)):
+    if await MockStore.is_mock():
+        return mock_store.get_agent_performance()
+
     agents = (await db.execute(select(User).where(User.role.in_(["agent", "admin"])))).scalars().all()
     result = []
     for a in agents:
@@ -72,6 +82,9 @@ async def get_ticket_trends(
     start_date: Optional[str] = None, end_date: Optional[str] = None,
     db: AsyncSession = Depends(get_db), current_user=Depends(require_agent_or_admin)
 ):
+    if await MockStore.is_mock():
+        return mock_store.get_ticket_trends()
+
     def parse_iso_date(value: Optional[str]) -> Optional[date]:
         if not value:
             return None
@@ -96,6 +109,9 @@ async def get_ticket_trends(
 
 @router.get("/ai-accuracy")
 async def get_ai_accuracy(db: AsyncSession = Depends(get_db), current_user=Depends(require_agent_or_admin)):
+    if await MockStore.is_mock():
+        return mock_store.get_ai_accuracy()
+
     from ....models.ai_resolution import AIResolution
     avg_result = (await db.execute(select(func.avg(AIResolution.confidence_score)))).scalar()
     auto_count = (await db.execute(select(func.count()).select_from(AIResolution).where(AIResolution.decision == "auto_resolve"))).scalar() or 0

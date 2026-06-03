@@ -4,12 +4,13 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, delete
 from ....core.database import get_db
-from ....core.security import require_admin, get_password_hash
+from ....core.security import require_admin, get_current_user, get_password_hash
 from ....models.user import User
 from ....models.confidence_threshold import ConfidenceThreshold
 from ....models.sla_config import SLAConfig
 from ....models.agent_group import AgentGroup
 from ....models.agent_group_member import AgentGroupMember
+from backend.mock.mock_store import mock_store, MockStore
 
 router = APIRouter()
 
@@ -172,4 +173,22 @@ async def get_system_health(db: AsyncSession = Depends(get_db), current_user=Dep
     return {
         "status": "healthy" if db_status == "healthy" else "degraded",
         "services": {"database": db_status, "redis": "not_configured", "elasticsearch": "not_configured"}
+    }
+
+
+@router.get("/settings/data-source")
+async def get_data_source(current_user=Depends(get_current_user)):
+    return {"data_source": await MockStore.get_mode()}
+
+
+@router.patch("/settings/data-source")
+async def update_data_source(data: dict, current_user=Depends(require_admin)):
+    mode = data.get("mode")
+    if mode not in {"mock", "live"}:
+        raise HTTPException(status_code=400, detail="mode must be 'mock' or 'live'")
+    await MockStore.set_mode(mode)
+    return {
+        "success": True,
+        "data_source": mode,
+        "message": f"Switched to {mode} data successfully."
     }

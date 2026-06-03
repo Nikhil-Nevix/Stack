@@ -9,6 +9,7 @@ from ....models.audit_log import AuditLog
 from ....models.api_call_log import APICallLog
 from ....models.powershell_execution import PowershellExecution
 from ....models.user import User
+from backend.mock.mock_store import MockStore, mock_store
 
 router = APIRouter()
 
@@ -22,6 +23,11 @@ async def get_audit_logs(
     page: int = 1, limit: int = 50,
     db: AsyncSession = Depends(get_db), current_user=Depends(require_admin)
 ):
+    if await MockStore.is_mock():
+        filters = {"ticket_id": ticket_id, "event_type": event_type}
+        logs = mock_store.get_audit_logs(filters=filters, limit=limit)
+        return {"logs": logs, "total": len(logs)}
+
     query = select(AuditLog)
     if ticket_id:
         query = query.where(AuditLog.ticket_id == ticket_id)
@@ -57,6 +63,12 @@ async def get_api_call_logs(
     api_name: Optional[str] = None, page: int = 1,
     db: AsyncSession = Depends(get_db), current_user=Depends(require_admin)
 ):
+    if await MockStore.is_mock():
+        logs = mock_store.get_api_logs(limit=100)
+        if api_name:
+            logs = [log for log in logs if log.get("api_name") == api_name]
+        return logs
+
     query = select(APICallLog)
     if api_name:
         query = query.where(APICallLog.api_name == api_name)
@@ -73,6 +85,9 @@ async def get_powershell_logs(
     page: int = 1,
     db: AsyncSession = Depends(get_db), current_user=Depends(require_admin)
 ):
+    if await MockStore.is_mock():
+        return mock_store.get_ps_executions(limit=100)
+
     result = await db.execute(select(PowershellExecution).order_by(PowershellExecution.executed_at.desc()).limit(100))
     logs = result.scalars().all()
     return [{"execution_id": l.execution_id, "ticket_id": l.ticket_id, "device_name": l.device_name,

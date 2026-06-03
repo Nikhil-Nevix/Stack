@@ -11,8 +11,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { format } from "date-fns";
 
 export default function AllTickets() {
-  const [status, setStatus] = useState<string>("");
-  const [priority, setPriority] = useState<string>("");
+  const [status, setStatus] = useState<string>("all");
+  const [priority, setPriority] = useState<string>("all");
   const [search, setSearch] = useState("");
 
   const { data, isLoading } = useListTickets({
@@ -45,7 +45,7 @@ export default function AllTickets() {
               data-testid="input-search-tickets"
             />
             <Select value={status} onValueChange={setStatus}>
-              <SelectTrigger className="w-[180px]" data-testid="select-status">
+              <SelectTrigger className="w-45" data-testid="select-status">
                 <SelectValue placeholder="All Statuses" />
               </SelectTrigger>
               <SelectContent>
@@ -57,7 +57,7 @@ export default function AllTickets() {
               </SelectContent>
             </Select>
             <Select value={priority} onValueChange={setPriority}>
-              <SelectTrigger className="w-[180px]" data-testid="select-priority">
+              <SelectTrigger className="w-45" data-testid="select-priority">
                 <SelectValue placeholder="All Priorities" />
               </SelectTrigger>
               <SelectContent>
@@ -81,7 +81,7 @@ export default function AllTickets() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-[100px]">ID</TableHead>
+                  <TableHead className="w-25">ID</TableHead>
                   <TableHead>Source</TableHead>
                   <TableHead>Title</TableHead>
                   <TableHead>Use Case</TableHead>

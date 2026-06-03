@@ -13,6 +13,7 @@ from ....models.ticket_note import TicketNote
 from ....models.audit_log import AuditLog
 from ....models.ai_resolution import AIResolution
 from ....models.sla_config import SLAConfig
+from backend.mock.mock_store import MockStore, mock_store
 
 router = APIRouter()
 
@@ -77,6 +78,26 @@ async def list_tickets(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    if await MockStore.is_mock():
+        filters = {
+            "status": status,
+            "use_case": use_case,
+            "priority": priority,
+            "sla_status": sla_status,
+            "search": search,
+        }
+        if current_user.role == "user":
+            filters["user_id"] = current_user.user_id
+        tickets = mock_store.get_all_tickets(filters)
+        start = (page - 1) * limit
+        end = start + limit
+        return {
+            "tickets": tickets[start:end],
+            "total": len(tickets),
+            "page": page,
+            "limit": limit,
+        }
+
     query = select(Ticket)
 
     if current_user.role == "user":
@@ -160,6 +181,20 @@ async def create_ticket(
 
 @router.get("/{ticketId}")
 async def get_ticket(ticketId: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    if await MockStore.is_mock():
+        ticket = mock_store.get_ticket(ticketId)
+        if not ticket:
+            raise HTTPException(status_code=404, detail="Ticket not found")
+        if current_user.role == "user" and ticket.get("user_id") != current_user.user_id:
+            raise HTTPException(status_code=403, detail="Access denied")
+        td = dict(ticket)
+        ai_resolution = mock_store.get_resolution_for_ticket(ticketId)
+        if ai_resolution and current_user.role in ("admin", "agent"):
+            td["ai_resolution"] = ai_resolution
+        else:
+            td["ai_resolution"] = None
+        return td
+
     result = await db.execute(select(Ticket).where(Ticket.ticket_id == ticketId))
     ticket = result.scalar_one_or_none()
     if not ticket:
@@ -300,6 +335,14 @@ async def list_ticket_notes(
     ticketId: str, db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    if await MockStore.is_mock():
+        ticket = mock_store.get_ticket(ticketId)
+        if not ticket:
+            raise HTTPException(status_code=404, detail="Ticket not found")
+        if current_user.role == "user" and ticket.get("user_id") != current_user.user_id:
+            raise HTTPException(status_code=403, detail="Access denied")
+        return mock_store.get_notes_for_ticket(ticketId, include_internal=current_user.role != "user")
+
     result = await db.execute(select(Ticket).where(Ticket.ticket_id == ticketId))
     ticket = result.scalar_one_or_none()
     if not ticket:
@@ -377,6 +420,9 @@ async def get_ticket_timeline(
     ticketId: str, db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_agent_or_admin)
 ):
+    if await MockStore.is_mock():
+        return list(reversed(mock_store.get_audit_logs(filters={"ticket_id": ticketId}, limit=50)))
+
     result = await db.execute(
         select(AuditLog).where(AuditLog.ticket_id == ticketId).order_by(AuditLog.created_at.asc())
     )

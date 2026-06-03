@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { 
   useListThresholds, useUpdateThreshold,
   useListSLAConfigs, useUpdateSLAConfigs,
@@ -15,12 +15,18 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
-import { Check, Shield, Users, Clock, Settings2, UserPlus, Mail } from "lucide-react";
+import { Check, Shield, Users, Clock, Settings2, UserPlus, Mail, Loader2 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { getDataSource, setDataSource as saveDataSource } from "@/lib/adminApi";
 
 export default function AdminConfig() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [dataSource, setDataSource] = useState<"mock" | "live">("live");
+  const [loadingDataSource, setLoadingDataSource] = useState(true);
+  const [savingDataSource, setSavingDataSource] = useState(false);
 
   // Thresholds Data
   const { data: thresholds, isLoading: loadingThresholds } = useListThresholds();
@@ -35,6 +41,31 @@ export default function AdminConfig() {
 
   // Users Data
   const { data: usersData, isLoading: loadingUsers } = useListUsers();
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadDataSource = async () => {
+      try {
+        const response = await getDataSource();
+        if (isMounted && response?.data_source) {
+          setDataSource(response.data_source);
+        }
+      } catch (error) {
+        // Keep live as the safe default if the setting cannot be fetched.
+      } finally {
+        if (isMounted) {
+          setLoadingDataSource(false);
+        }
+      }
+    };
+
+    loadDataSource();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const handleUpdateThreshold = async (id: string, auto: number, review: number) => {
     try {
@@ -55,6 +86,18 @@ export default function AdminConfig() {
     toast({ title: "SLA Configs Saved", description: "All changes have been applied successfully." });
   };
 
+  const handleSaveDataSource = async () => {
+    setSavingDataSource(true);
+    try {
+      await saveDataSource(dataSource);
+      toast({ title: "Switching...", description: `Reloading with ${dataSource} data.` });
+      window.setTimeout(() => window.location.reload(), 500);
+    } catch (error) {
+      toast({ variant: "destructive", title: "Error", description: "Failed to switch data source" });
+      setSavingDataSource(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -71,6 +114,7 @@ export default function AdminConfig() {
                 <TabsTrigger value="sla" className="gap-2 data-[state=active]:bg-background data-[state=active]:shadow-sm"><Clock className="h-4 w-4" /> SLA Config</TabsTrigger>
                 <TabsTrigger value="groups" className="gap-2 data-[state=active]:bg-background data-[state=active]:shadow-sm"><Shield className="h-4 w-4" /> Agent Groups</TabsTrigger>
                 <TabsTrigger value="users" className="gap-2 data-[state=active]:bg-background data-[state=active]:shadow-sm"><Users className="h-4 w-4" /> Users</TabsTrigger>
+                <TabsTrigger value="system-settings" className="gap-2 data-[state=active]:bg-background data-[state=active]:shadow-sm"><Settings2 className="h-4 w-4" /> System Settings</TabsTrigger>
               </TabsList>
             </div>
             
@@ -88,7 +132,7 @@ export default function AdminConfig() {
                           <TableHead>Use Case</TableHead>
                           <TableHead>Auto-Resolve Min (%)</TableHead>
                           <TableHead>Review After Min (%)</TableHead>
-                          <TableHead className="w-[100px]"></TableHead>
+                          <TableHead className="w-25"></TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -258,6 +302,83 @@ export default function AdminConfig() {
                     </Table>
                   </div>
                 )}
+              </TabsContent>
+
+              <TabsContent value="system-settings" className="mt-0 outline-none">
+                <div className="mb-4">
+                  <h3 className="text-lg font-semibold">System Settings</h3>
+                  <p className="text-sm text-muted-foreground">Manage global platform behavior and data source selection.</p>
+                </div>
+
+                <Card className="shadow-sm">
+                  <CardHeader className="bg-muted/30 pb-4">
+                    <CardTitle className="text-md">Data Source</CardTitle>
+                    <CardDescription>
+                      Switch between live PostgreSQL data and built-in mock data for testing and demonstration purposes.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4 pt-4">
+                    {loadingDataSource ? (
+                      <Skeleton className="h-40 w-full" />
+                    ) : (
+                      <RadioGroup
+                        value={dataSource}
+                        onValueChange={(value) => setDataSource(value as "mock" | "live")}
+                        className="grid gap-4 md:grid-cols-2"
+                      >
+                        <label
+                          htmlFor="data-source-live"
+                          className={`cursor-pointer rounded-lg border p-4 transition-colors ${
+                            dataSource === "live" ? "border-[#0B1F3A] bg-[#0B1F3A]/5" : "border-border bg-background"
+                          }`}
+                        >
+                          <div className="flex items-start gap-3">
+                            <RadioGroupItem id="data-source-live" value="live" className="mt-1 border-[#0B1F3A] text-[#0B1F3A]" />
+                            <div className="space-y-1">
+                              <div className="font-medium">🟢 Live Data</div>
+                              <p className="text-sm text-muted-foreground">Uses real PostgreSQL database</p>
+                            </div>
+                          </div>
+                        </label>
+
+                        <label
+                          htmlFor="data-source-mock"
+                          className={`cursor-pointer rounded-lg border p-4 transition-colors ${
+                            dataSource === "mock" ? "border-[#F47920] bg-[#F47920]/5" : "border-border bg-background"
+                          }`}
+                        >
+                          <div className="flex items-start gap-3">
+                            <RadioGroupItem id="data-source-mock" value="mock" className="mt-1 border-[#F47920] text-[#F47920]" />
+                            <div className="space-y-1">
+                              <div className="font-medium">🟠 Mock Data</div>
+                              <p className="text-sm text-muted-foreground">Uses simulated data (not stored in DB, resets on restart)</p>
+                            </div>
+                          </div>
+                        </label>
+                      </RadioGroup>
+                    )}
+
+                    {dataSource === "mock" && (
+                      <Alert className="border-[#F47920] bg-[#F47920]/10 text-[#7A3100]">
+                        <AlertTitle>Mock Data Mode Active</AlertTitle>
+                        <AlertDescription>
+                          You are viewing simulated data. No changes will be saved to the database. Mock data resets when the backend restarts.
+                        </AlertDescription>
+                      </Alert>
+                    )}
+
+                    <div className="flex justify-end">
+                      <Button
+                        className="bg-[#F47920] text-white hover:bg-[#d96b1b]"
+                        onClick={handleSaveDataSource}
+                        disabled={savingDataSource || loadingDataSource}
+                      >
+                        {savingDataSource ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                        Save & Reload
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
               </TabsContent>
             </div>
           </Tabs>

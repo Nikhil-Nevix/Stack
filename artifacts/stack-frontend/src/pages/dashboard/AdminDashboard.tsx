@@ -17,8 +17,28 @@ export default function AdminDashboard() {
   if (loadingSummary || !summary) {
     return <div className="space-y-4"><Skeleton className="h-32 w-full" /><Skeleton className="h-64 w-full" /></div>;
   }
+  console.log("Dashboard Summary:", summary);
+  const summaryData = summary as any;
 
-  const pieData = summary.by_status.map(s => ({ name: s.status, value: s.count }));
+  const statusSource = summaryData.by_status ?? summaryData.tickets_by_status ?? [];
+  const useCaseSource = summaryData.by_use_case ?? summaryData.tickets_by_use_case ?? [];
+
+  const pieData = Array.isArray(statusSource)
+    ? statusSource.map((s: any) => ({
+        name: s.status,
+        value: s.count,
+      }))
+    : Object.entries(statusSource).map(([status, count]) => ({
+        name: status,
+        value: Number(count) || 0,
+      }));
+
+  const useCaseData = Array.isArray(useCaseSource)
+    ? useCaseSource
+    : Object.entries(useCaseSource).map(([use_case, count]) => ({
+        use_case,
+        count: Number(count) || 0,
+      }));
 
   return (
     <div className="space-y-6">
@@ -29,7 +49,7 @@ export default function AdminDashboard() {
             <TicketIcon className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{summary.open_tickets}</div>
+            <div className="text-2xl font-bold">{summaryData.total_open ?? summaryData.open_tickets ?? 0}</div>
           </CardContent>
         </Card>
         <Card>
@@ -38,7 +58,7 @@ export default function AdminDashboard() {
             <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{summary.resolved_today}</div>
+            <div className="text-2xl font-bold">{summary?.resolved_today ?? 0}</div>
           </CardContent>
         </Card>
         <Card>
@@ -47,7 +67,7 @@ export default function AdminDashboard() {
             <Clock className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{summary.sla_met_pct.toFixed(1)}%</div>
+            <div className="text-2xl font-bold">{(summaryData.sla_met_percent ?? summaryData.sla_met_pct ?? 0).toFixed(1)}%</div>
           </CardContent>
         </Card>
         <Card>
@@ -56,7 +76,7 @@ export default function AdminDashboard() {
             <Zap className="h-4 w-4 text-accent" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-accent">{summary.auto_resolution_pct.toFixed(1)}%</div>
+            <div className="text-2xl font-bold text-accent">{(summaryData.auto_resolution_rate ?? summaryData.auto_resolution_pct ?? 0).toFixed(1)}%</div>
           </CardContent>
         </Card>
       </div>
@@ -66,9 +86,9 @@ export default function AdminDashboard() {
           <CardHeader>
             <CardTitle>Ticket Volume by Use Case</CardTitle>
           </CardHeader>
-          <CardContent className="h-[300px]">
+          <CardContent className="h-75">
             <ResponsiveContainer width="100%" height="100%">
-              <RechartsBarChart data={summary.by_use_case}>
+              <RechartsBarChart data={useCaseData}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
                 <XAxis dataKey="use_case" tick={{fontSize: 12}} />
                 <YAxis tick={{fontSize: 12}} />
@@ -83,7 +103,7 @@ export default function AdminDashboard() {
           <CardHeader>
             <CardTitle>Ticket Status Breakdown</CardTitle>
           </CardHeader>
-          <CardContent className="h-[300px] flex items-center justify-center">
+          <CardContent className="h-75 flex items-center justify-center">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
@@ -95,7 +115,7 @@ export default function AdminDashboard() {
                   paddingAngle={2}
                   dataKey="value"
                 >
-                  {pieData.map((entry, index) => (
+                  {pieData.map((_, index) => (
                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                   ))}
                 </Pie>

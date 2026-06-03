@@ -8,6 +8,7 @@ from ....core.security import require_admin
 from ....models.roi_metric import ROIMetric
 from ....models.ticket import Ticket
 from ....core.config import settings
+from backend.mock.mock_store import MockStore, mock_store
 
 router = APIRouter()
 
@@ -38,11 +39,17 @@ async def calculate_roi(db: AsyncSession) -> dict:
 
 @router.get("/current")
 async def get_current_roi(db: AsyncSession = Depends(get_db), current_user=Depends(require_admin)):
+    if await MockStore.is_mock():
+        return mock_store.get_roi_current()
+
     return await calculate_roi(db)
 
 
 @router.get("/history")
 async def get_roi_history(db: AsyncSession = Depends(get_db), current_user=Depends(require_admin)):
+    if await MockStore.is_mock():
+        return mock_store.get_roi_trend()
+
     result = await db.execute(select(ROIMetric).order_by(ROIMetric.period_start.desc()).limit(12))
     metrics = result.scalars().all()
     if not metrics:
@@ -57,6 +64,9 @@ async def get_roi_history(db: AsyncSession = Depends(get_db), current_user=Depen
 
 @router.post("/recalculate")
 async def recalculate_roi(db: AsyncSession = Depends(get_db), current_user=Depends(require_admin)):
+    if await MockStore.is_mock():
+        return mock_store.get_roi_current()
+
     data = await calculate_roi(db)
     metric = ROIMetric(
         metric_id=data["metric_id"],

@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -27,10 +28,37 @@ import {
   User as UserIcon,
   LogOut
 } from "lucide-react";
+import { getDataSource } from "@/lib/adminApi";
 
 export function AppLayout({ children, title }: { children: React.ReactNode, title?: string }) {
   const { user, logout } = useAuth();
   const [location] = useLocation();
+  const [showMockBanner, setShowMockBanner] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadDataSource = async () => {
+      try {
+        const response = await getDataSource();
+        if (isMounted) {
+          setShowMockBanner(response?.data_source === "mock");
+        }
+      } catch (error) {
+        if (isMounted) {
+          setShowMockBanner(false);
+        }
+      }
+    };
+
+    if (user) {
+      loadDataSource();
+    }
+
+    return () => {
+      isMounted = false;
+    };
+  }, [user]);
 
   if (!user) return null;
 
@@ -175,6 +203,12 @@ export function AppLayout({ children, title }: { children: React.ReactNode, titl
           <SidebarTrigger />
           <h1 className="text-lg font-semibold text-foreground">{title || "STACK Service Desk"}</h1>
         </header>
+        {showMockBanner && (
+          <div className="w-full bg-[#F47920] px-6 py-3 text-sm font-medium text-white shadow-sm">
+            🟠 Mock Data Mode - You are viewing simulated data. 
+            Switch to Live Data in Admin → System Settings.
+          </div>
+        )}
         <main className="flex-1 p-6">
           {children}
         </main>
